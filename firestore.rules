@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - email: string (required)
+    //   - role: string (required, 'admin'|'user')
+    //   - plan: string (required)
+    //   - generations_used: int (required)
+    //   - generation_limit: int (required)
+    //   - stripe_customer_id: string (optional)
+    //   - subscription_status: string (optional)
+    //   - createdAt: timestamp (optional)
+    //
+    // Collection: stats
+    // Document ID: global
+    // Fields:
+    //   - founder_monthly_count: int (required)
+    //   - founder_yearly_count: int (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "talkingowlandgirl@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role', 'plan', 'generations_used', 'generation_limit']) &&
+             data.email is string &&
+             data.role in ['admin', 'user'] &&
+             data.plan is string &&
+             data.generations_used is int &&
+             data.generation_limit is int &&
+             (!('last_reset' in data) || data.last_reset is string);
+    }
+
+    function isValidStats(data) {
+      return data.keys().hasAll(['founder_monthly_count', 'founder_yearly_count']) &&
+             data.founder_monthly_count is int &&
+             data.founder_yearly_count is int;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Users can create their own profile as 'user' with 'free' plan initially
+      // Admin can create anything
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (
+        (isOwner(userId) && request.resource.data.role == 'user' && request.resource.data.plan == 'free') ||
+        isAdmin()
+      );
+
+      // Users can only update their own non-sensitive fields
+      // Plan and limits are updated via backend (Stripe webhook)
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        (isOwner(userId) && 
+         request.resource.data.role == resource.data.role && 
+         request.resource.data.plan == resource.data.plan &&
+         request.resource.data.generation_limit == resource.data.generation_limit &&
+         request.resource.data.generations_used == resource.data.generations_used) ||
+        isAdmin()
+      );
+    }
+
+    match /stats/global {
+      allow read: if true; // Publicly readable for the counter
+      allow write: if isAdmin() || (isAuthenticated() && isValidStats(request.resource.data)); 
+    }
+  }
+}

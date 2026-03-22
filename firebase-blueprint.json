@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and subscription data",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "plan": { "type": "string", "enum": ["free", "founder_monthly", "founder_yearly", "creator", "studio"] },
+        "generations_used": { "type": "integer" },
+        "generation_limit": { "type": "integer" },
+        "stripe_customer_id": { "type": "string" },
+        "subscription_status": { "type": "string" },
+        "last_reset": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "plan", "generations_used", "generation_limit"]
+    },
+    "GlobalStats": {
+      "title": "Global Stats",
+      "description": "Global counters for the application",
+      "type": "object",
+      "properties": {
+        "founder_monthly_count": { "type": "integer" },
+        "founder_yearly_count": { "type": "integer" }
+      },
+      "required": ["founder_monthly_count", "founder_yearly_count"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/stats/global": {
+      "schema": "GlobalStats",
+      "description": "Global application statistics"
+    }
+  }
+}
